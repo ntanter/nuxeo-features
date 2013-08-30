@@ -17,40 +17,64 @@
 
 package org.nuxeo.ecm.automation.rest.jaxrs;
 
-import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
+import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.core.Response;
 
-import org.nuxeo.ecm.core.api.IdRef;
+import org.apache.commons.lang.StringUtils;
+import org.nuxeo.ecm.core.api.ClientException;
+import org.nuxeo.ecm.core.model.NoSuchDocumentException;
 import org.nuxeo.ecm.webengine.model.WebObject;
+import org.nuxeo.ecm.webengine.model.exceptions.WebResourceNotFoundException;
+import org.nuxeo.ecm.webengine.model.exceptions.WebSecurityException;
 import org.nuxeo.ecm.webengine.model.impl.ModuleRoot;
-
 
 /**
  * The root entry for the WebEngine module.
  *
+ * @since 5.7.2
  */
-@Path("/api")
+@Path("/api{repo : (/repo/[^/]+?)?}")
 @Produces("text/html;charset=UTF-8")
-@WebObject(type="APIRoot")
+@WebObject(type = "APIRoot")
 public class APIRoot extends ModuleRoot {
 
-    @GET
-    public Object doGet() {
-        return getView("index");
+    @Path("/")
+    public Object doGetRepository(@PathParam("repo")
+    String repositoryParam) throws NoSuchDocumentException {
+        if (StringUtils.isNotBlank(repositoryParam)) {
+            String repoName = repositoryParam.substring("repo/".length() + 1);
+            try {
+                ctx.setRepositoryName(repoName);
+            } catch (final ClientException e) {
+                throw new WebResourceNotFoundException(e.getMessage());
+            }
+
+        }
+        return newObject("repo");
+    }
+
+    @Path("/user")
+    public Object doGetUser() {
+        return newObject("users");
+    }
+
+    @Path("/group")
+    public Object doGetGroup() {
+        return newObject("groups");
     }
 
 
-    @Path("path")
-    public Object getDocsByPath() {
-        return new JSONDocumentRoot(ctx, "/");
+    @Override
+    public Object handleError(WebApplicationException e) {
+        if (e instanceof WebSecurityException) {
+            return Response.status(401).entity("not authorized").type("text/plain").build();
+        } else if (e instanceof WebResourceNotFoundException) {
+            return Response.status(404).entity(e.getMessage()).type("text/plain").build();
+        } else {
+            return super.handleError(e);
+        }
     }
-
-    @Path("id/{id}")
-    public Object getDocsById(@PathParam("id") String id) {
-        return new JSONDocumentRoot(ctx, new IdRef(id));
-    }
-
-
 }

@@ -20,6 +20,7 @@
 package org.nuxeo.ecm.platform.ec.notification;
 
 import java.io.Serializable;
+import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
@@ -42,6 +43,7 @@ import org.nuxeo.ecm.core.api.DataModel;
 import org.nuxeo.ecm.core.api.DocumentModel;
 import org.nuxeo.ecm.core.api.NuxeoGroup;
 import org.nuxeo.ecm.core.api.NuxeoPrincipal;
+import org.nuxeo.ecm.core.api.SystemPrincipal;
 import org.nuxeo.ecm.core.api.blobholder.BlobHolder;
 import org.nuxeo.ecm.core.api.security.SecurityConstants;
 import org.nuxeo.ecm.core.event.Event;
@@ -58,11 +60,14 @@ import org.nuxeo.ecm.platform.url.api.DocumentView;
 import org.nuxeo.ecm.platform.url.api.DocumentViewCodecManager;
 import org.nuxeo.ecm.platform.usermanager.UserManager;
 import org.nuxeo.runtime.api.Framework;
+import org.nuxeo.runtime.api.login.LoginComponent;
 
 public class NotificationEventListener implements
         PostCommitFilteringEventListener {
 
     private static final Log log = LogFactory.getLog(NotificationEventListener.class);
+
+    private static final String CHECK_READ_PERMISSION_PROPERTY = "notification.check.read.permission";
 
     private DocumentViewCodecManager docLocator;
 
@@ -219,13 +224,26 @@ public class NotificationEventListener implements
             String subscriptor, Event event, DocumentEventContext ctx)
             throws ClientException {
 
-        if (!ctx.getCoreSession().hasPermission(
-                getUserManager().getPrincipal(subscriptor),
-                ctx.getSourceDocument().getRef(), SecurityConstants.READ)) {
-            log.debug("Notification will not be sent: + '" + subscriptor
-                    + "' do not have Read permission on document "
-                    + ctx.getSourceDocument().getId());
-            return;
+        Principal principal;
+        if (LoginComponent.SYSTEM_USERNAME.equals(subscriptor)) {
+            principal = new SystemPrincipal(null);
+        } else {
+            principal = getUserManager().getPrincipal(subscriptor);
+            if (principal == null) {
+                log.error("No Nuxeo principal found for '" + subscriptor
+                        + "'. No notification will be sent to this user");
+                return;
+            }
+        }
+
+        if (Boolean.parseBoolean(Framework.getProperty(CHECK_READ_PERMISSION_PROPERTY))) {
+            if (!ctx.getCoreSession().hasPermission(principal,
+                    ctx.getSourceDocument().getRef(), SecurityConstants.READ)) {
+                log.debug("Notification will not be sent: + '" + subscriptor
+                        + "' do not have Read permission on document "
+                        + ctx.getSourceDocument().getId());
+                return;
+            }
         }
 
         log.debug("Producing notification message.");

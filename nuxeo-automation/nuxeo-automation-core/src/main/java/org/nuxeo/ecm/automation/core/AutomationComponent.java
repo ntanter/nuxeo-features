@@ -1,21 +1,40 @@
 /*
- * Copyright (c) 2006-2011 Nuxeo SA (http://nuxeo.com/) and others.
+ * (C) Copyright 2013 Nuxeo SA (http://nuxeo.com/) and contributors.
  *
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * are made available under the terms of the GNU Lesser General Public License
+ * (LGPL) version 2.1 which accompanies this distribution, and is available at
+ * http://www.gnu.org/licenses/lgpl-2.1.html
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
  *
  * Contributors:
  *     bstefanescu
  */
 package org.nuxeo.ecm.automation.core;
 
+import java.lang.management.ManagementFactory;
+
+import javax.management.InstanceAlreadyExistsException;
+import javax.management.InstanceNotFoundException;
+import javax.management.MBeanRegistrationException;
+import javax.management.MBeanServer;
+import javax.management.MalformedObjectNameException;
+import javax.management.NotCompliantMBeanException;
+import javax.management.ObjectName;
+
+import org.nuxeo.ecm.automation.AutomationFilter;
 import org.nuxeo.ecm.automation.AutomationService;
+import org.nuxeo.ecm.automation.ChainException;
 import org.nuxeo.ecm.automation.OperationType;
 import org.nuxeo.ecm.automation.core.events.EventHandler;
 import org.nuxeo.ecm.automation.core.events.EventHandlerRegistry;
 import org.nuxeo.ecm.automation.core.events.operations.FireEvent;
+import org.nuxeo.ecm.automation.core.exception.ChainExceptionFilter;
+import org.nuxeo.ecm.automation.core.exception.ChainExceptionImpl;
 import org.nuxeo.ecm.automation.core.impl.ChainTypeImpl;
 import org.nuxeo.ecm.automation.core.impl.OperationServiceImpl;
 import org.nuxeo.ecm.automation.core.operations.FetchContextBlob;
@@ -102,6 +121,7 @@ import org.nuxeo.ecm.automation.core.operations.stack.PushDocument;
 import org.nuxeo.ecm.automation.core.operations.stack.PushDocumentList;
 import org.nuxeo.ecm.automation.core.rendering.operations.RenderDocument;
 import org.nuxeo.ecm.automation.core.rendering.operations.RenderDocumentFeed;
+import org.nuxeo.ecm.automation.core.trace.TracerFactory;
 import org.nuxeo.runtime.model.ComponentContext;
 import org.nuxeo.runtime.model.ComponentInstance;
 import org.nuxeo.runtime.model.DefaultComponent;
@@ -122,13 +142,21 @@ public class AutomationComponent extends DefaultComponent {
 
     public static final String XP_EVENT_HANDLERS = "event-handlers";
 
+    public static final String XP_CHAIN_EXCEPTION = "chainException";
+
+    public static final String XP_AUTOMATION_FILTER = "automationFilter";
+
     protected OperationServiceImpl service;
 
     protected EventHandlerRegistry handlers;
 
+    protected TracerFactory tracerFactory;
+
     @Override
     public void activate(ComponentContext context) throws Exception {
         service = new OperationServiceImpl();
+        tracerFactory = new TracerFactory();
+        bindManagement();
         // register built-in operations
         service.putOperation(FetchContextDocument.class);
         service.putOperation(FetchContextBlob.class);
@@ -232,10 +260,28 @@ public class AutomationComponent extends DefaultComponent {
         handlers = new EventHandlerRegistry(service);
     }
 
+    protected void bindManagement() throws MalformedObjectNameException,
+            NotCompliantMBeanException, InstanceAlreadyExistsException,
+            MBeanRegistrationException {
+        MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+        mBeanServer.registerMBean(tracerFactory, new ObjectName(
+                "org.nuxeo.automation:name=tracerfactory"));
+    }
+
+    protected void unBindManagement() throws MalformedObjectNameException,
+            NotCompliantMBeanException, InstanceAlreadyExistsException,
+            MBeanRegistrationException, InstanceNotFoundException {
+        MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+        mBeanServer.unregisterMBean(new ObjectName(
+                "org.nuxeo.automation:name=tracerfactory"));
+    }
+
     @Override
     public void deactivate(ComponentContext context) throws Exception {
         service = null;
         handlers = null;
+        tracerFactory = null;
+        unBindManagement();
     }
 
     @Override
@@ -253,6 +299,16 @@ public class AutomationComponent extends DefaultComponent {
                     occ.toOperationChain(contributor.getContext().getBundle()),
                     occ);
             service.putOperation(docChainType, occ.replace);
+        } else if (XP_CHAIN_EXCEPTION.equals(extensionPoint)) {
+            ChainExceptionDescriptor chainExceptionDescriptor = (ChainExceptionDescriptor) contribution;
+            ChainException chainException = new ChainExceptionImpl(
+                    chainExceptionDescriptor);
+            service.putChainException(chainException);
+        } else if (XP_AUTOMATION_FILTER.equals(extensionPoint)) {
+            AutomationFilterDescriptor automationFilterDescriptor = (AutomationFilterDescriptor) contribution;
+            ChainExceptionFilter chainExceptionFilter = new ChainExceptionFilter(
+                    automationFilterDescriptor);
+            service.putAutomationFilter(chainExceptionFilter);
         } else if (XP_ADAPTERS.equals(extensionPoint)) {
             TypeAdapterContribution tac = (TypeAdapterContribution) contribution;
             service.putTypeAdapter(tac.accept, tac.produce,
@@ -276,6 +332,16 @@ public class AutomationComponent extends DefaultComponent {
         } else if (XP_CHAINS.equals(extensionPoint)) {
             OperationChainContribution occ = (OperationChainContribution) contribution;
             service.removeOperationChain(occ.getId());
+        } else if (XP_CHAIN_EXCEPTION.equals(extensionPoint)) {
+            ChainExceptionDescriptor chainExceptionDescriptor = (ChainExceptionDescriptor) contribution;
+            ChainException chainException = new ChainExceptionImpl(
+                    chainExceptionDescriptor);
+            service.removeExceptionChain(chainException);
+        } else if (XP_AUTOMATION_FILTER.equals(extensionPoint)) {
+            AutomationFilterDescriptor automationFilterDescriptor = (AutomationFilterDescriptor) contribution;
+            AutomationFilter automationFilter = new ChainExceptionFilter(
+                    automationFilterDescriptor);
+            service.removeAutomationFilter(automationFilter);
         } else if (XP_ADAPTERS.equals(extensionPoint)) {
             TypeAdapterContribution tac = (TypeAdapterContribution) contribution;
             service.removeTypeAdapter(tac.accept, tac.produce);
@@ -296,6 +362,9 @@ public class AutomationComponent extends DefaultComponent {
         }
         if (adapter == EventHandlerRegistry.class) {
             return adapter.cast(handlers);
+        }
+        if (adapter == TracerFactory.class) {
+            return adapter.cast(tracerFactory);
         }
         return null;
     }

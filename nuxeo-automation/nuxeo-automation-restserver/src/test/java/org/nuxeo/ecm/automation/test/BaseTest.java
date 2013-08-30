@@ -51,7 +51,7 @@ import com.sun.jersey.api.client.filter.HTTPBasicAuthFilter;
 /**
  *
  *
- * @since TODO
+ * @since 5.7.2
  */
 public class BaseTest {
 
@@ -65,45 +65,58 @@ public class BaseTest {
 
     @Before
     public void doBefore() {
-        ClientConfig config = new DefaultClientConfig();
-        Client client = Client.create(config);
-        client.addFilter(new HTTPBasicAuthFilter("Administrator",
-                "Administrator"));
-        service = client.resource("http://localhost:18090/api/");
+        service = getServiceFor("Administrator","Administrator");
+
 
         mapper = new ObjectMapper();
 
+    }
+
+    /**
+     *
+     * @param user
+     * @param password
+     * @return
+     *
+     * @since 5.7.3
+     */
+    protected WebResource getServiceFor(String user, String password) {
+        ClientConfig config = new DefaultClientConfig();
+        Client client = Client.create(config);
+        client.addFilter(new HTTPBasicAuthFilter(user,password));
+        return client.resource("http://localhost:18090/api/");
     }
 
     @Inject
     CoreSession session;
 
     protected ClientResponse getResponse(RequestType requestType, String path) {
-        return getResponse(requestType, path, null,null);
+        return getResponse(requestType, path, null, null);
     }
 
-    protected ClientResponse getResponse(RequestType requestType, String path, Map<String,String> queryParams) {
-        return getResponse(requestType, path, null,queryParams);
+    protected ClientResponse getResponse(RequestType requestType, String path,
+            Map<String, String> queryParams) {
+        return getResponse(requestType, path, null, queryParams);
     }
 
-    protected ClientResponse getResponse(RequestType requestType, String path, String data) {
+    protected ClientResponse getResponse(RequestType requestType, String path,
+            String data) {
         return getResponse(requestType, path, data, null);
     }
 
-
     protected ClientResponse getResponse(RequestType requestType, String path,
-            String data, Map<String,String> queryParams) {
-        WebResource wr= service.path(path);
-        if(queryParams != null && !queryParams.isEmpty()) {
-           for(Entry<String, String> entry : queryParams.entrySet()) {
-               wr = wr.queryParam(entry.getKey(), entry.getValue());
-           }
+            String data, Map<String, String> queryParams) {
+        WebResource wr = service.path(path);
+        if (queryParams != null && !queryParams.isEmpty()) {
+            for (Entry<String, String> entry : queryParams.entrySet()) {
+                wr = wr.queryParam(entry.getKey(), entry.getValue());
+            }
         }
 
         Builder builder = wr.accept(MediaType.APPLICATION_JSON) //
         .header("X-NXDocumentProperties", "dublincore");
 
-        if(requestType == RequestType.POSTREQUEST) {
+        if (requestType == RequestType.POSTREQUEST) {
             builder.header("Content-type", "application/json+nxrequest");
         } else {
             builder.header("Content-type", "application/json+nxentity");
@@ -119,7 +132,7 @@ public class BaseTest {
         case PUT:
             return builder.put(ClientResponse.class, data);
         case DELETE:
-            return builder.delete(ClientResponse.class);
+            return builder.delete(ClientResponse.class, data);
         default:
             throw new RuntimeException();
         }
@@ -127,6 +140,7 @@ public class BaseTest {
 
     protected void dispose(CoreSession session) throws Exception {
         if (Proxy.isProxyClass(session.getClass())) {
+
             InvocationHandler handler = Proxy.getInvocationHandler(session);
             if (handler instanceof TransactionalCoreSessionWrapper) {
                 Field field = TransactionalCoreSessionWrapper.class.getDeclaredField("session");
@@ -149,13 +163,12 @@ public class BaseTest {
         assertEquals(note.getTitle(), node.get("title").getValueAsText());
     }
 
-
     protected List<JsonNode> getEntries(JsonNode node) {
         assertEquals("documents", node.get("entity-type").getValueAsText());
         assertTrue(node.get("entries").isArray());
         List<JsonNode> result = new ArrayList<>();
         Iterator<JsonNode> elements = node.get("entries").getElements();
-        while(elements.hasNext()) {
+        while (elements.hasNext()) {
             result.add(elements.next());
         }
         return result;

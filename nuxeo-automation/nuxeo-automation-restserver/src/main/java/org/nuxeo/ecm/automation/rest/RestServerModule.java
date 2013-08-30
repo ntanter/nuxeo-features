@@ -21,6 +21,12 @@ import java.util.Set;
 
 import org.nuxeo.ecm.automation.rest.io.BusinessAdapterReader;
 import org.nuxeo.ecm.automation.rest.io.JSONDocumentModelReader;
+import org.nuxeo.ecm.automation.rest.io.NuxeoGroupListWriter;
+import org.nuxeo.ecm.automation.rest.io.NuxeoGroupReader;
+import org.nuxeo.ecm.automation.rest.io.NuxeoGroupWriter;
+import org.nuxeo.ecm.automation.rest.io.NuxeoPrincipalListWriter;
+import org.nuxeo.ecm.automation.rest.io.NuxeoPrincipalReader;
+import org.nuxeo.ecm.automation.rest.io.NuxeoPrincipalWriter;
 import org.nuxeo.ecm.automation.server.jaxrs.io.JsonRequestReader;
 import org.nuxeo.ecm.automation.server.jaxrs.io.UrlEncodedFormRequestReader;
 import org.nuxeo.ecm.automation.server.jaxrs.io.writers.BlobsWriter;
@@ -58,6 +64,12 @@ public class RestServerModule extends WebEngineModule {
         result.add(new JsonRecordSetWriter());
         result.add(new BusinessAdapterReader());
         result.add(new JSONDocumentModelReader());
+        result.add(new NuxeoPrincipalWriter());
+        result.add(new NuxeoPrincipalReader());
+        result.add(new NuxeoGroupWriter());
+        result.add(new NuxeoGroupReader());
+        result.add(new NuxeoGroupListWriter());
+        result.add(new NuxeoPrincipalListWriter());
         return result;
     }
 

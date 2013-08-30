@@ -16,7 +16,7 @@
  */
 package org.nuxeo.ecm.automation.test;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -38,7 +38,10 @@ import org.nuxeo.runtime.test.runner.FeaturesRunner;
 import org.nuxeo.runtime.test.runner.Jetty;
 import org.nuxeo.runtime.test.runner.LocalDeploy;
 
+import com.google.common.base.Joiner;
 import com.sun.jersey.api.client.ClientResponse;
+
+import edu.emory.mathcs.backport.java.util.Arrays;
 
 /**
  * Test the various ways to query for document lists
@@ -105,6 +108,55 @@ public class DocumentListTest extends BaseTest {
         assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
         JsonNode node = mapper.readTree(response.getEntityInputStream());
         assertEquals(2, getEntries(node).size());
+
+    }
+
+    @Test
+    public void iCanDeleteAListOfDocuments() throws Exception {
+        // Given two notes
+        DocumentModel note1 = RestServerInit.getNote(1, session);
+        DocumentModel folder0 = RestServerInit.getFolder(0, session);
+
+        // When i call a bulk delete
+        String data = Joiner.on(";").join(Arrays.asList(new String[]{"id=" + note1.getId(), "id=" + folder0.getId()}));
+        ClientResponse response = getResponse(RequestType.DELETE, "/bulk;"+data);
+
+        // Then the documents are removed from repository
+        dispose(session);
+        assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+
+        assertFalse(session.exists(note1.getRef()));
+        assertFalse(session.exists(folder0.getRef()));
+
+    }
+
+    @Test
+    public void iCanUpdateDocumentLists() throws Exception {
+        // Given two notes
+        DocumentModel note1 = RestServerInit.getNote(1, session);
+        DocumentModel note2 = RestServerInit.getNote(2, session);
+
+
+        String data = "{\"entity-type\":\"document\","
+                + "\"type\":\"Note\","
+                + "\"properties\":{"
+                + "    \"dc:description\":\"bulk description\""
+                + "  }"
+                + "}";
+
+        // When i call a bulk update
+        String ids = Joiner.on(";").join(Arrays.asList(new String[]{"id=" + note1.getId(), "id=" + note2.getId()}));
+        ClientResponse response = getResponse(RequestType.PUT, "/bulk;"+ids, data );
+
+        // Then the documents are updated accordingly
+
+        dispose(session);
+        assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+        for(int i : new Integer[]{1,2}) {
+            note1 = RestServerInit.getNote(i, session);
+            assertEquals("bulk description", note1.getPropertyValue("dc:description"));
+        }
+
 
     }
 

@@ -26,6 +26,7 @@ import java.util.Map;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
 
+import org.jboss.el.ExpressionFactoryImpl;
 import org.nuxeo.common.utils.i18n.I18NUtils;
 import org.nuxeo.ecm.automation.AutomationService;
 import org.nuxeo.ecm.automation.OperationContext;
@@ -41,13 +42,14 @@ import org.nuxeo.ecm.core.api.NuxeoPrincipal;
 import org.nuxeo.ecm.core.api.impl.blob.ByteArrayBlob;
 import org.nuxeo.ecm.platform.actions.Action;
 import org.nuxeo.ecm.platform.actions.ActionContext;
+import org.nuxeo.ecm.platform.actions.ELActionContext;
 import org.nuxeo.ecm.platform.actions.ejb.ActionManager;
+import org.nuxeo.ecm.platform.el.ExpressionContext;
 
 /**
  * Queries {@link ActionManager} for available actions in the given context
  *
  * @author Tiry (tdelprat@nuxeo.com)
- *
  */
 @Operation(id = GetActions.ID, category = Constants.CAT_SERVICES, label = "List available actions", description = "Retrieve list of available actions for a given category. Action context is built based on the Operation context (currentDocument will be fetched from Context if not provided as input). If this operation is executed in a chain that initialized the Seam context, it will be used for Action context")
 public class GetActions {
@@ -81,12 +83,12 @@ public class GetActions {
 
     protected ActionContext getActionContext(DocumentModel currentDocument)
             throws Exception {
-
         if (ctx.containsKey(SEAM_ACTION_CONTEXT)) {
             // if Seam Context has been initialized, use it
             return (ActionContext) ctx.get(SEAM_ACTION_CONTEXT);
         }
-        ActionContext actionContext = new ActionContext();
+        ActionContext actionContext = new ELActionContext(
+                new ExpressionContext(), new ExpressionFactoryImpl());
         actionContext.setDocumentManager(session);
         actionContext.setCurrentPrincipal((NuxeoPrincipal) session.getPrincipal());
         if (currentDocument != null) {
@@ -94,7 +96,7 @@ public class GetActions {
         } else {
             actionContext.setCurrentDocument(getCurrentDocumentFromContext());
         }
-        actionContext.putAll(ctx);
+        actionContext.putAllLocalVariables(ctx);
         return actionContext;
     }
 
@@ -143,7 +145,7 @@ public class GetActions {
 
             JSONObject properties = new JSONObject();
             Map<String, Serializable> actionProperties = action.getProperties();
-            for (Map.Entry<String, Serializable> entry : actionProperties .entrySet()) {
+            for (Map.Entry<String, Serializable> entry : actionProperties.entrySet()) {
                 properties.element(entry.getKey(), entry.getValue());
             }
             obj.element("properties", properties);
