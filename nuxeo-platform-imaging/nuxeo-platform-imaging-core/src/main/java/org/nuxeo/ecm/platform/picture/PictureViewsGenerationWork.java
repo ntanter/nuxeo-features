@@ -1,11 +1,15 @@
 package org.nuxeo.ecm.platform.picture;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 
 import org.nuxeo.ecm.core.api.Blob;
+import org.nuxeo.ecm.core.api.DocumentLocation;
 import org.nuxeo.ecm.core.api.DocumentModel;
-import org.nuxeo.ecm.core.api.DocumentRef;
+import org.nuxeo.ecm.core.api.IdRef;
+import org.nuxeo.ecm.core.api.impl.DocumentLocationImpl;
 import org.nuxeo.ecm.core.api.model.Property;
 import org.nuxeo.ecm.core.work.AbstractWork;
 import org.nuxeo.ecm.platform.picture.api.adapters.PictureResourceAdapter;
@@ -17,13 +21,23 @@ import org.nuxeo.ecm.platform.picture.api.adapters.PictureResourceAdapter;
  */
 public class PictureViewsGenerationWork extends AbstractWork {
 
+    private static final long serialVersionUID = 1L;
+
+    public static final String CATEGORY_PICTURE_GENERATION = "pictureViewsGeneration";
+
     protected final String repositoryName;
 
-    protected final DocumentRef docRef;
+    protected final String docId;
 
     protected final String xpath;
 
-    public static final String CATEGORY_PICTURE_GENERATION = "pictureViewsGeneration";
+    public PictureViewsGenerationWork(String repositoryName,
+            String docId, String xpath) {
+        super(repositoryName + ':' + docId + ':' + xpath + ":pictureview");
+        this.repositoryName = repositoryName;
+        this.docId = docId;
+        this.xpath = xpath;
+    }
 
     @Override
     public String getCategory() {
@@ -32,14 +46,14 @@ public class PictureViewsGenerationWork extends AbstractWork {
 
     @Override
     public String getTitle() {
-        return "Picture views generation " + docRef;
+        return "Picture views generation";
     }
 
-    public PictureViewsGenerationWork(String repositoryName,
-            DocumentRef docRef, String xpath) {
-        this.repositoryName = repositoryName;
-        this.docRef = docRef;
-        this.xpath = xpath;
+    @Override
+    public Collection<DocumentLocation> getDocuments() {
+        DocumentLocation loc = new DocumentLocationImpl(repositoryName,
+                new IdRef(docId));
+        return Collections.singleton(loc);
     }
 
     @Override
@@ -50,7 +64,7 @@ public class PictureViewsGenerationWork extends AbstractWork {
         setStatus("Extracting");
         try {
             initSession(repositoryName);
-            workingDocument = session.getDocument(docRef);
+            workingDocument = session.getDocument(new IdRef(docId));
             if (workingDocument != null) {
                 workingDocument.detach(true);
             }
@@ -77,7 +91,7 @@ public class PictureViewsGenerationWork extends AbstractWork {
         setStatus("Saving");
         initSession(repositoryName);
         session.saveDocument(workingDocument);
-        setStatus(null);
+        setStatus("Done");
     }
 
 }
